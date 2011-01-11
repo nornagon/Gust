@@ -1,0 +1,166 @@
+class TreeNode {
+  var fixture;
+  var body;
+  var anchor;
+  ArrayList children;
+
+  TreeNode (var fixture, var anchor) {
+    this.fixture = fixture;
+    this.body = fixture.GetBody();
+    this.anchor = anchor;
+    this.children = new ArrayList();
+  }
+
+  void addChild(TreeNode c) {
+    children.add(c);
+  }
+
+  void ApplySpring() {
+    float damping = -anchor.GetJointSpeed() * 10;
+    float force = -20 * anchor.GetJointAngle() + damping;
+    anchor.SetMaxMotorTorque(abs(force));
+    anchor.SetMotorSpeed(force < 0 ? -10000 : 10000);
+    for (int i = 0; i < children.size(); i++) {
+      children.get(i).ApplySpring(force);
+    }
+  }
+
+  void ApplyWind(var force) {
+    body.ApplyForce(force, body.GetWorldCenter());
+    AllChildren(this.ApplySpring);
+    for (int i = 0; i < children.size(); i++) {
+      children.get(i).ApplyWind(force);
+    }
+  }
+
+  void AllChildren(var f) {
+  }
+}
+
+b2Vec2 = Box2D.Common.Math.b2Vec2;
+V = function (x,y) { return new b2Vec2(x,y); }
+b2BodyDef = Box2D.Dynamics.b2BodyDef;
+b2Body = Box2D.Dynamics.b2Body;
+b2FixtureDef = Box2D.Dynamics.b2FixtureDef;
+b2Fixture = Box2D.Dynamics.b2Fixture;
+b2World = Box2D.Dynamics.b2World;
+b2MassData = Box2D.Collision.Shapes.b2MassData;
+b2PolygonShape = Box2D.Collision.Shapes.b2PolygonShape;
+b2RevoluteJointDef = Box2D.Dynamics.Joints.b2RevoluteJointDef;
+b2DebugDraw = Box2D.Dynamics.b2DebugDraw;
+b2Scale = 0.1;
+
+world = new b2World(new b2Vec2(0, 0), true);
+
+TreeNode tree = null;
+
+void setup() {
+	size(600,600);
+
+	var fixDef = new b2FixtureDef;
+	fixDef.density = 10.0;
+	fixDef.friction = 0.5;
+	fixDef.restitution = 0.2;
+
+	var bodyDef = new b2BodyDef;
+	bodyDef.type = b2Body.b2_dynamicBody;
+	bodyDef.position.x = 300 * b2Scale;
+	bodyDef.position.y = 20 * b2Scale;
+	fixDef.shape = new b2PolygonShape;
+	a = [V(-3*b2Scale, 0), V(3*b2Scale, 0), V(0, 80*b2Scale)];
+	fixDef.shape.SetAsArray(a);
+
+	var treeFix = world.CreateBody(bodyDef).CreateFixture(fixDef);
+	var rj = new b2RevoluteJointDef();
+	var p = treeFix.GetBody().GetPosition()
+	rj.Initialize(world.GetGroundBody(), treeFix.GetBody(), p);
+	rj.enableMotor = true;
+	var treeJoint = world.CreateJoint(rj);
+
+	tree = new TreeNode(treeFix, treeJoint);
+
+  bodyDef.position.x = 300 * b2Scale;
+  bodyDef.position.y = 40 * b2Scale;
+  bodyDef.angle = PI / 2;
+	a = [V(-3*b2Scale, 0), V(3*b2Scale, 0), V(0, 40*b2Scale)];
+	fixDef.shape.SetAsArray(a);
+	treeFix = world.CreateBody(bodyDef).CreateFixture(fixDef);
+	rj.Initialize(tree.body, treeFix.GetBody(), treeFix.GetBody().GetPosition());
+	treeJoint = world.CreateJoint(rj);
+
+	tree.addChild(new TreeNode(treeFix, treeJoint));
+
+	var debugDraw = new b2DebugDraw();
+	debugDraw.SetSprite(externals.context);
+	debugDraw.SetDrawScale(1/b2Scale);
+	debugDraw.SetFillAlpha(0.3);
+	debugDraw.SetLineThickness(1.0);
+	debugDraw.SetFlags(b2DebugDraw.e_shapeBit | b2DebugDraw.e_jointBit);
+	world.SetDebugDraw(debugDraw);
+}
+
+boolean drawDebugData = true;
+var keys = {};
+
+void keyPressed() {
+  if (CODED) {
+    keys[keyCode] = true;
+  } else {
+    keys[key] = true;
+  }
+}
+
+void keyReleased() {
+  if (CODED) {
+    keys[keyCode] = false;
+  } else {
+    keys[key] = false;
+  }
+}
+
+float lastFrame = 0;
+
+void draw() {
+	scale(1,-1);
+	translate(0,-600);
+
+	world.Step(1 / 60.0, 10, 10);
+	world.ClearForces();
+	world.DrawDebugData();
+
+  float dt;
+  if (lastFrame == 0) {
+    dt = 1/60.0;
+  } else {
+    dt = 1000 * (millis() - lastFrame);
+  }
+  lastFrame = millis();
+
+  float windForce = (noise(millis() / 10000) - 0.5) * 0.5;
+  if (keys[LEFT]) {
+    windForce -= 0.2;
+  }
+  if (keys[RIGHT]) {
+    windForce += 0.2;
+  }
+
+  tree.ApplyWind(V(windForce, 0));
+  tree.ApplySpring();
+
+  /*fill(120,120,120);
+  stroke(0,0,0);
+  beginShape();
+  vertex(width/2-3,20);
+  vertex(width/2 + wind ,60);
+  vertex(width/2+3,20);
+  endShape(CLOSE);*/
+}
+
+externals.onblur = function () {
+  noLoop();
+}
+
+externals.onfocus = function () {
+  loop();
+}
+
